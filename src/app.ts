@@ -15,9 +15,14 @@ export async function createApp() {
   );
 
   app.enableCors({
-    origin: process.env.FRONTEND_URL ?? 'http://localhost:5173',
-    credentials: true,
-  });
+  origin: [
+    'https://alerta-nationala-web.vercel.app/',
+    'http://localhost:5173',
+  ],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+});
 
   await app.init();
 

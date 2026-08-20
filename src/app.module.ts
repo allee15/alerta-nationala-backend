@@ -13,6 +13,8 @@ import { AuthModule } from './auth/auth.module';
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
         uri: config.get<string>('ATLAS_URI'),
+        dbName:
+          config.get<string>('ATLAS_DB_NAME') ?? 'alerta-nationala-proiect',
       }),
     }),
     UsersModule,

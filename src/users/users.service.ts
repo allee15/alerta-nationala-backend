@@ -38,4 +38,11 @@ export class UsersService {
       refreshTokenHash,
     });
   }
+
+   async countUsersInZones(zones: string[]): Promise<number> {
+    return this.userModel.countDocuments({
+      role: UserRole.CITIZEN,
+      zones: { $in: zones },
+    });
+  }
 }

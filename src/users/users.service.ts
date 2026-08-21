@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-
+import { NotFoundException } from '@nestjs/common';
 import { User, UserDocument, UserRole } from './schemas/user.schema';
 
 @Injectable()
@@ -44,5 +44,19 @@ export class UsersService {
       role: UserRole.CITIZEN,
       zones: { $in: zones },
     });
+  }
+
+    async updateZones(userId: string, zones: string[]): Promise<UserDocument> {
+    const user = await this.userModel.findByIdAndUpdate(
+      userId,
+      { zones },
+      { new: true },
+    );
+
+    if (!user) {
+      throw new NotFoundException('Utilizator inexistent.');
+    }
+
+    return user;
   }
 }

@@ -48,3 +48,12 @@ export const JUDETE: Judet[] = [
   { name: 'Vrancea', lat: 45.70, lng: 27.18 },
   { name: 'Bucuresti', lat: 44.43, lng: 26.10 },
 ];
+
+const DIACRITICS_MAP: Record<string, string> = {
+  ă: 'a', â: 'a', î: 'i', ș: 's', ş: 's', ț: 't', ţ: 't',
+  Ă: 'A', Â: 'A', Î: 'I', Ș: 'S', Ş: 'S', Ț: 'T', Ţ: 'T',
+};
+
+export function stripDiacritics(value: string): string {
+  return value.replace(/[ăâîșşțţĂÂÎȘŞȚŢ]/g, (ch) => DIACRITICS_MAP[ch] ?? ch);
+}

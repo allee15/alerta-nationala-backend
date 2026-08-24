@@ -1,6 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { JUDETE } from '../common/data/judete';
 
+import { XMLParser } from 'fast-xml-parser';
+import { stripDiacritics } from '../common/data/judete';
+
 export interface ZoneWeather {
   zoneName: string;
   temperature: number;
@@ -92,4 +95,84 @@ export class WeatherService {
     this.cache.set(zoneName, { data, expiresAt: Date.now() + CACHE_TTL_MS });
     return data;
   }
+
+    private warningsCache: { data: Map<string, WeatherWarning[]>; expiresAt: number } | null = null;
+  private readonly WARNINGS_FEED_URL =
+    'https://feeds.meteoalarm.org/feeds/meteoalarm-legacy-atom-romania';
+  private readonly WARNINGS_CACHE_TTL_MS = 15 * 60 * 1000;
+
+  async getWarningsForZones(zoneNames: string[]): Promise<WeatherWarning[]> {
+    const byZone = await this.getAllWarningsByZone();
+    const result: WeatherWarning[] = [];
+    for (const zone of zoneNames) {
+      result.push(...(byZone.get(zone) ?? []));
+    }
+    return result;
+  }
+
+  private async getAllWarningsByZone(): Promise<Map<string, WeatherWarning[]>> {
+    if (this.warningsCache && this.warningsCache.expiresAt > Date.now()) {
+      return this.warningsCache.data;
+    }
+
+    const map = new Map<string, WeatherWarning[]>();
+
+    try {
+      const response = await fetch(this.WARNINGS_FEED_URL);
+      if (!response.ok) {
+        return map;
+      }
+
+      const xml = await response.text();
+      const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_' });
+      const parsed = parser.parse(xml);
+
+      const rawEntries = parsed?.feed?.entry;
+      const entries = Array.isArray(rawEntries) ? rawEntries : rawEntries ? [rawEntries] : [];
+      const now = Date.now();
+
+      for (const entry of entries) {
+        const expires = new Date(entry['cap:expires']);
+        if (Number.isNaN(expires.getTime()) || expires.getTime() < now) {
+          continue; // avertizare deja expirata
+        }
+
+        const title: string = entry['title'] ?? '';
+        const match = title.match(/^(Yellow|Orange|Red)\s+(.+?)\s+Warning issued for Romania/);
+        if (!match) {
+          continue;
+        }
+
+        const areaDesc: string = entry['cap:areaDesc'] ?? '';
+        const zoneName = stripDiacritics(areaDesc);
+
+        const warning: WeatherWarning = {
+          zoneName,
+          color: match[1] as 'Yellow' | 'Orange' | 'Red',
+          event: match[2],
+          severity: entry['cap:severity'] ?? 'Unknown',
+          onset: new Date(entry['cap:onset']),
+          expires,
+        };
+
+        const existing = map.get(zoneName) ?? [];
+        existing.push(warning);
+        map.set(zoneName, existing);
+      }
+    } catch {
+      return map;
+    }
+
+    this.warningsCache = { data: map, expiresAt: Date.now() + this.WARNINGS_CACHE_TTL_MS };
+    return map;
+  }
+}
+
+export interface WeatherWarning {
+  zoneName: string;
+  color: 'Yellow' | 'Orange' | 'Red';
+  event: string;
+  severity: string;
+  onset: Date;
+  expires: Date;
 }

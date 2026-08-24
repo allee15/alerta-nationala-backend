@@ -34,4 +34,16 @@ export class WeatherController {
 
     return this.weatherService.getWeatherForZones(user.zones);
   }
+
+    @Get('warnings/me')
+  async getMyWarnings(@Req() req: Request) {
+    const payload = req.user as JwtPayload;
+    const user = await this.usersService.findById(payload.sub);
+
+    if (!user) {
+      throw new UnauthorizedException('Utilizator inexistent.');
+    }
+
+    return this.weatherService.getWarningsForZones(user.zones);
+  }
 }

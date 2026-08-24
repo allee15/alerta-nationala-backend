@@ -1,6 +1,6 @@
 import * as mongoose from 'mongoose';
 import * as dotenv from 'dotenv';
-import { Guide, GuideSchema } from '../guides/schemas/guide.schema';
+import { Guide, GuideSchema } from '../src/guides/schemas/guide.schema';
 
 dotenv.config();
 

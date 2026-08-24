@@ -7,6 +7,7 @@ import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
 import { AlertsModule } from './alerts/alerts.module';
 import { WeatherModule } from './weather/weather.module';
+import { GuidesModule } from './guides/guides.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { WeatherModule } from './weather/weather.module';
     AuthModule,
     AlertsModule,
     WeatherModule,
+    GuidesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -8,6 +8,7 @@ import { AuthModule } from './auth/auth.module';
 import { AlertsModule } from './alerts/alerts.module';
 import { WeatherModule } from './weather/weather.module';
 import { GuidesModule } from './guides/guides.module';
+import { AssemblyPointsModule } from './assembly-points/assembly-points.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { GuidesModule } from './guides/guides.module';
     AlertsModule,
     WeatherModule,
     GuidesModule,
+    AssemblyPointsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

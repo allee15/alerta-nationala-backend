@@ -1,98 +1,180 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Alertă Națională — Backend
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+API REST în NestJS + MongoDB, folosit de aplicația iOS (cetățean) și de dashboard-ul web (operator). Acest README acoperă și arhitectura de ansamblu a sistemului (valabilă pentru toate cele 3 componente) și schema bazei de date.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## Cuprins
+- [Instrucțiuni de rulare](#instrucțiuni-de-rulare)
+- [Populare bază de date (seed) și conturi de test](#populare-bază-de-date-seed-și-conturi-de-test)
+- [Arhitectura sistemului](#arhitectura-sistemului)
+- [Schema bazei de date](#schema-bazei-de-date)
+- [Justificarea alegerilor tehnice](#justificarea-alegerilor-tehnice)
+- [Funcționalități bonus](#funcționalități-bonus-peste-cerințele-minime)
+- [Ce nu am terminat și ce aș fi făcut diferit](#ce-nu-am-terminat-și-ce-aș-fi-făcut-diferit)
 
-## Description
+---
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+## Instrucțiuni de rulare
 
-## Project setup
+### Cerințe
+- Node.js 18+ (necesar pentru `fetch` nativ, folosit la integrările meteo)
+- Un cluster MongoDB (Atlas sau local)
 
+### Pași
 ```bash
-$ npm install
+git clone <repo-url> alerta-nationala-backend
+cd alerta-nationala-backend
+npm install
 ```
 
-## Compile and run the project
+Creezi un fișier `.env` la rădăcină, după modelul `.env.example`:
+```
+ATLAS_URI=mongodb+srv://<user>:<parola>@<cluster>/
+ATLAS_DB_NAME=alerta-nationala-proiect
+JWT_ACCESS_SECRET=<secret-lung-si-aleator>
+JWT_REFRESH_SECRET=<alt-secret-lung-si-aleator>
+```
+> Numele exacte ale variabilelor JWT sunt cele din `.env.example` din repo — completează-le cu valori proprii, nu le refolosi pe cele din exemplu.
 
+Rulezi serverul:
 ```bash
-# development
-$ npm run start
+npm run start:dev
+```
+API-ul pornește implicit pe `http://localhost:3000`.
 
-# watch mode
-$ npm run start:dev
+### Populare bază de date (seed) și conturi de test
+```bash
+npm run seed:guides
+```
+Populează colecția de ghiduri de urgență (cutremur, incendiu, inundație, fenomene meteo extreme, reguli generale).
 
-# production mode
-$ npm run start:prod
+**Conturi pre-create pentru evaluare:**
+- Cetățean: `citizen@test.com` / `Test1234!` (zonă: Cluj)
+- Operator: `operator@test.com` / `Test1234!`
+
+> Nu există endpoint de "promovare" la rolul de operator — e o decizie asumată (vezi secțiunea de mai jos). Contul de operator de test trebuie creat prin `POST /auth/register`, apoi rolul schimbat manual în MongoDB: `db.users.updateOne({email: "operator@test.com"}, {$set: {role: "OPERATOR"}})`.
+
+Pentru testare completă, adaugă și câteva puncte de adunare din contul de operator (`POST /assembly-points`), în același județ cu contul de cetățean, ca să apară pe hartă.
+
+---
+
+## Arhitectura sistemului
+
+```
+┌─────────────────┐         ┌──────────────────┐
+│   iOS (SwiftUI)  │         │  Web (React/Vite) │
+│   cetățean       │         │  operator          │
+└────────┬─────────┘         └─────────┬─────────┘
+         │ JWT (access + refresh)      │ JWT
+         └──────────────┬──────────────┘
+                         │
+                ┌────────▼─────────┐
+                │  NestJS API       │
+                │  (acest repo)     │
+                └────────┬──────────┘
+                         │
+              ┌──────────┼──────────────────────┐
+              │          │                       │
+       ┌──────▼─────┐ ┌──▼──────────┐  ┌────────▼────────┐
+       │  MongoDB    │ │ Open-Meteo  │  │ MeteoAlarm (ANM) │
+       │  (Atlas)    │ │ (prognoză)  │  │ (avertizări      │
+       └─────────────┘ └─────────────┘  │  meteo oficiale) │
+                                          └──────────────────┘
 ```
 
-## Run tests
+**Module NestJS:**
+- `AuthModule` — înregistrare, login, refresh token (JWT access + refresh), parole hash-uite.
+- `UsersModule` — profil, zone de interes (`PATCH /user/zones`).
+- `AlertsModule` — CRUD alerte, check-in, statistici de confirmare.
+- `GuidesModule` — ghiduri de urgență, cu versionare pentru sincronizare incrementală.
+- `AssemblyPointsModule` — CRUD puncte de adunare (creare/editare/dezactivare, nu ștergere).
+- `WeatherModule` — prognoză (Open-Meteo) + avertizări meteo oficiale (MeteoAlarm/ANM).
 
-```bash
-# unit tests
-$ npm run test
+**Autorizare pe roluri:** `RolesGuard` + decoratorul `@Roles(...)`, aplicat peste `JwtAuthGuard` pe fiecare endpoint care trebuie restricționat la `OPERATOR`. Rolul e citit din payload-ul JWT (`req.user.role`), populat de `JwtStrategy`.
 
-# e2e tests
-$ npm run test:e2e
+**Fluxul de date pe zone:** utilizatorul își alege una sau mai multe zone (județe, listă statică ASCII, ex. `"Cluj"`, `"Timis"`) la înregistrare, editabile ulterior. Alertele, avertizările meteo și punctele de adunare sunt filtrate server-side după intersecția cu `user.zones` — operatorul vede tot, necenzurat de nicio zonă.
 
-# test coverage
-$ npm run test:cov
+---
+
+## Schema bazei de date
+
+```mermaid
+erDiagram
+    USER ||--o{ ALERT : "creeaza (daca e operator)"
+    USER ||--o{ CHECKIN : "trimite"
+    ALERT ||--o{ CHECKIN : "primeste"
+
+    USER {
+        ObjectId _id
+        string email
+        string passwordHash
+        string role "CITIZEN | OPERATOR"
+        string[] zones
+    }
+    ALERT {
+        ObjectId _id
+        string type "CUTREMUR | INUNDATIE | INCENDIU | METEO_EXTREM | ALTA"
+        string severity "INFORMARE | ATENTIONARE | PERICOL"
+        string message
+        string[] zones
+        Date startsAt
+        Date endsAt
+        string status "ACTIVE | ENDED"
+        ObjectId createdBy
+        Date endedAt "nullable"
+    }
+    CHECKIN {
+        ObjectId _id
+        ObjectId alert
+        ObjectId user
+        Date clientTimestamp "momentul real al confirmarii"
+    }
+    GUIDE {
+        ObjectId _id
+        string title
+        string category
+        string summary
+        number version
+        array sections "heading + items[]"
+    }
+    ASSEMBLY_POINT {
+        ObjectId _id
+        string name
+        string address
+        number lat
+        number lng
+        string zone
+        number capacity "nullable"
+        boolean isActive
+    }
 ```
 
-## Deployment
+Indecși relevanți: `Alert(zones, status)`, `AssemblyPoint(zone, isActive)`, `CheckIn(alert, user)` unic (un singur check-in per user per alertă — upsert la re-trimitere).
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+---
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+## Justificarea alegerilor tehnice
 
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
-```
+- **Zone ca stringuri simple, fără diacritice** (`"Cluj"`, `"Constanta"`), nu ID-uri sau coduri: listă statică de 42 de intrări, ținută identică (hardcodată) în toate cele 3 codebase-uri. Am ales asta în locul unui endpoint `/zones` ca să nu introducem încă o dependență de rețea pentru o listă care nu se schimbă niciodată.
+- **Open-Meteo pentru prognoză** — gratuit, fără API key, suficient de precis pentru scopul aplicației. **MeteoAlarm/ANM pentru avertizări oficiale** — sursă reală, oficială, gratuită, feed CAP/Atom public, fără cheie. Le-am ținut separate intenționat: prognoza nu e o avertizare oficială, iar cerința 3.6 zice explicit că trebuie diferențiate vizual.
+- **Fără cont de "promovare" la operator** — pentru scopul unui proiect de facultate, un endpoint de auto-promovare la rol de operator ar fi o gaură de securitate reală (oricine s-ar putea auto-promova). Am preferat promovare manuală în DB pentru contul de test, documentată clar aici.
+- **Check-in cu upsert** (`findOneAndUpdate` cu `upsert: true`) în loc de `insert` simplu — reflectă corect cerința ca userul să poată re-trimite check-in-ul dintr-o coadă offline fără să genereze duplicate.
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+---
 
-## Resources
+## Funcționalități bonus (peste cerințele minime)
 
-Check out a few resources that may come in handy when working with NestJS:
+- Avertizări meteo **oficiale**, agregate din feed-ul public MeteoAlarm (sursă: ANM), nu doar o euristică derivată din codul de prognoză.
+- Alertele sunt și ele cache-uite local pe iOS (nu doar ghidurile și punctele de adunare, cum cerea minimul), cu indicator explicit de "date posibil neactualizate" când sunt offline.
+- Deep link către Google Maps / Apple Maps pentru rute către punctele de adunare.
+- Protecție la nivel de client împotriva check-in-urilor duplicate (`CheckedInAlertsStore`), pe lângă upsert-ul de pe server.
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+---
 
-## Support
+## Ce nu am terminat și ce aș fi făcut diferit
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+- **Promovarea la rol de operator** e manuală (direct în DB). Aș fi făcut un endpoint de administrare protejat separat (ex. cu o cheie de admin în `.env`), nu doar editare manuală.
+- **Sincronizarea alertelor offline** se reîmprospătează doar la redeschiderea ecranului Home, nu printr-un listener continuu de rețea (`NWPathMonitor` pe iOS). Ar actualiza automat imediat ce revine conexiunea, chiar dacă userul rămâne pe ecran.
+- **Fără notificări push** — userul află de o alertă nouă doar când deschide aplicația. Într-un sistem real de tip RO-Alert, notificarea push (sau chiar cell broadcast) e esențială; am renunțat la ea din lipsă de timp și pentru că necesită infrastructură suplimentară (APNs).
+- **Fără teste automate** (unit/integration) — dat fiind timpul limitat, am prioritizat acoperirea funcțională completă a cerințelor față de testare automată.
+- **Securitate de producție minimă** — nu am adăugat `helmet`, rate limiting pe endpoint-uri sensibile (`/auth/login`) sau CORS restrictiv; sunt potrivite pentru evaluare, nu pentru producție reală.
+- **Matching-ul de zone pentru avertizările MeteoAlarm** se face prin normalizare de diacritice pe numele de județ din feed; dacă ANM și-ar schimba vreodată formatul denumirilor, maparea s-ar rupe silențios (fără eroare, doar avertizarea n-ar mai apărea) — aș fi adăugat un test de sanitate care verifică periodic că toate cele 42 de județe din feed se mapează cu succes.
